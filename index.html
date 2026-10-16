@@ -1,0 +1,1094 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>Timestamp Format Parser Differential</title>
+<meta name="description" content="Paste timestamp strings and see, row by row, whether RFC 3339 (as updated by RFC 9557), the ECMAScript Date Time String Format, your browser's own Date.parse, Python 3.14 datetime.fromisoformat rules and Go time.Parse(time.RFC3339) rules accept each one, and which instant each produces. Runs entirely in your browser.">
+<link rel="canonical" href="https://0xelitesystem.github.io/timestamp-format-parser-differential/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Timestamp Format Parser Differential">
+<meta property="og:description" content="One timestamp string, five readers: RFC 3339 (as updated by RFC 9557), ECMA-262, your browser's Date.parse, Python 3.14 fromisoformat rules and Go time.Parse(time.RFC3339) rules, side by side.">
+<meta property="og:url" content="https://0xelitesystem.github.io/timestamp-format-parser-differential/">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Timestamp Format Parser Differential","applicationCategory":"DeveloperApplication","operatingSystem":"Any (browser)","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"url":"https://0xelitesystem.github.io/timestamp-format-parser-differential/","author":{"@type":"Person","name":"0xelitesystem","url":"https://elitesystem.ai"}}
+</script>
+<script>
+/* Apply a remembered light or dark choice before first paint. */
+(function () {
+  var KEY = "theme";
+  try {
+    var t = localStorage.getItem(KEY);
+    if (t === "dark" || t === "light") { document.documentElement.setAttribute("data-theme", t); }
+  } catch (e) {}
+})();
+</script>
+<style>
+/* Palette verified by math (WCAG 2.x relative luminance), every text token
+   against every background token, both themes. Zero pairs below 4.5:1.
+   LIGHT, on --bg #e8ebef / --panel #ffffff / --code #dcdfe4
+     --ink       #0a0a0a  16.56  19.80  14.82
+     --ink-soft  #3d444d   8.24   9.85   7.37
+     --accent    #2d6b00   5.46   6.53   4.89
+     --ok        #1a6127   6.31   7.55   5.65
+     --warn      #8a4d00   5.59   6.68   5.00
+     --err       #a82d14   5.76   6.88   5.15
+     --info      #0f4f7a   7.26   8.68   6.50
+   DARK, on --bg #0a0a0a / --panel #141414 / --code #1c1c1c
+     --ink       #e8ebef  16.56  15.41  14.25
+     --ink-soft  #b9c0c9  10.79  10.04   9.29
+     --accent    #d4ff3a  17.12  15.94  14.74
+     --ok        #7ee08a  12.18  11.33  10.48
+     --warn      #f0c674  12.29  11.44  10.58
+     --err       #ff9b8a   9.72   9.04   8.36
+     --info      #8fd3ff  12.19  11.34  10.49
+   Primary button: --bg text on --accent fill, 5.46:1 light, 17.12:1 dark.
+   --muted is a BORDER token only. It is never a text colour. */
+:root {
+  color-scheme: light;
+  --bg: #e8ebef; --panel: #ffffff; --code: #dcdfe4;
+  --ink: #0a0a0a; --ink-soft: #3d444d; --accent: #2d6b00;
+  --ok: #1a6127; --warn: #8a4d00; --err: #a82d14; --info: #0f4f7a;
+  --muted: #5b636e;
+  --mono: ui-monospace, "Cascadia Mono", "Segoe UI Mono", "SF Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0a0a0a; --panel: #141414; --code: #1c1c1c;
+    --ink: #e8ebef; --ink-soft: #b9c0c9; --accent: #d4ff3a;
+    --ok: #7ee08a; --warn: #f0c674; --err: #ff9b8a; --info: #8fd3ff;
+    --muted: #8f98a3;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0a0a0a; --panel: #141414; --code: #1c1c1c;
+  --ink: #e8ebef; --ink-soft: #b9c0c9; --accent: #d4ff3a;
+  --ok: #7ee08a; --warn: #f0c674; --err: #ff9b8a; --info: #8fd3ff;
+  --muted: #8f98a3;
+}
+* { box-sizing: border-box; }
+html { background: var(--bg); }
+body { margin: 0; padding: 0 1rem 4rem; background: var(--bg); color: var(--ink); font: 16px/1.55 var(--sans); }
+.wrap { max-width: 90rem; margin: 0 auto; }
+header.top { display: flex; flex-wrap: wrap; gap: .8rem; align-items: flex-start; justify-content: space-between; padding: 2rem 0 1rem; border-bottom: 1px solid var(--muted); }
+header.top .titles { flex: 1 1 30rem; min-width: 0; }
+h1 { font-size: 1.7rem; line-height: 1.2; margin: 0 0 .35rem; }
+h2 { font-size: 1.25rem; margin: 2.2rem 0 .6rem; }
+h3 { font-size: 1.05rem; margin: 1.2rem 0 .4rem; }
+p { margin: .6rem 0; overflow-wrap: anywhere; }
+li, .quote { overflow-wrap: anywhere; }
+.lede { color: var(--ink-soft); margin: 0; }
+.note { color: var(--ink-soft); font-size: .92rem; }
+a { color: var(--accent); }
+a:focus-visible, button:focus-visible, select:focus-visible, textarea:focus-visible, input:focus-visible, summary:focus-visible, [tabindex="0"]:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+code { font-family: var(--mono); font-size: .92em; overflow-wrap: anywhere; }
+.panel { background: var(--panel); border: 1px solid var(--muted); border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+label { display: block; font-weight: 600; margin: .4rem 0 .25rem; }
+label .hint { font-weight: 400; color: var(--ink-soft); font-size: .88rem; }
+label.inline { display: inline-flex; gap: .45rem; align-items: center; margin: 0; }
+textarea, select { font-family: var(--mono); font-size: .9rem; color: var(--ink); background: var(--code); border: 1px solid var(--muted); border-radius: 4px; padding: .5rem; }
+textarea { width: 100%; min-height: 13rem; resize: vertical; white-space: pre; overflow-x: auto; }
+select { font-family: var(--sans); max-width: 100%; }
+input[type="checkbox"] { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
+button { font: inherit; font-weight: 600; color: var(--ink); background: var(--code); border: 1px solid var(--muted); border-radius: 4px; padding: .45rem .9rem; cursor: pointer; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.row { display: flex; flex-wrap: wrap; gap: .7rem; align-items: center; margin-top: .8rem; }
+.status { font-weight: 600; }
+.badge { display: inline-block; font-family: var(--mono); font-size: .74rem; font-weight: 700; border: 1px solid currentColor; border-radius: 3px; padding: 0 .35rem; margin: 0 .3rem .15rem 0; white-space: nowrap; }
+.b-ok { color: var(--ok); } .b-err { color: var(--err); } .b-warn { color: var(--warn); } .b-info { color: var(--info); } .b-soft { color: var(--ink-soft); }
+.tablewrap { overflow-x: auto; position: relative; }
+table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+th, td { text-align: left; padding: .45rem .5rem; border-bottom: 1px solid var(--muted); vertical-align: top; }
+th { color: var(--ink-soft); font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+#out td { min-width: 11rem; }
+#out td.inp { min-width: 13rem; }
+td .val { font-family: var(--mono); font-size: .8rem; overflow-wrap: anywhere; display: block; }
+td .why { color: var(--ink-soft); font-size: .8rem; display: block; margin-top: .2rem; }
+td pre.fields { font-family: var(--mono); font-size: .74rem; margin: .3rem 0 0; white-space: pre-wrap; color: var(--ink-soft); }
+ul.rownotes { margin: .3rem 0 0; padding-left: 1rem; font-size: .8rem; color: var(--ink-soft); }
+td.res { font-family: var(--mono); font-weight: 700; white-space: nowrap; }
+td.res.pass { color: var(--ok); } td.res.fail { color: var(--err); }
+ul.rules { padding-left: 1.1rem; font-size: .92rem; }
+ul.rules li { margin: .4rem 0; }
+.quote { display: block; color: var(--ink-soft); border-left: 2px solid var(--muted); padding-left: .55rem; margin-top: .15rem; }
+details { margin: .4rem 0; }
+summary { cursor: pointer; font-weight: 600; }
+footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--muted); color: var(--ink-soft); font-size: .9rem; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div class="titles">
+    <h1>Timestamp Format Parser Differential</h1>
+    <p class="lede">Paste timestamp strings, one per line. Each row shows whether RFC 3339 (as updated by RFC 9557), the ECMA-262 Date Time String Format, your browser's own <code>Date.parse</code>, Python 3.14 <code>datetime.fromisoformat</code> rules and Go <code>time.Parse(time.RFC3339)</code> rules accept it, and which instant each produces. Everything runs in your browser.</p>
+  </div>
+  <button type="button" id="theme-toggle">Use dark theme</button>
+</header>
+
+<main>
+<section aria-labelledby="in-h">
+  <h2 id="in-h">Input</h2>
+  <div class="panel">
+    <label for="in">Timestamps <span class="hint">(one per line, up to 500 lines; empty lines are skipped; nothing is trimmed)</span></label>
+    <textarea id="in" spellcheck="false" autocomplete="off" autocapitalize="off"></textarea>
+    <div class="row">
+      <button type="button" class="primary" id="run">Compare</button>
+      <button type="button" id="example">Load examples</button>
+      <button type="button" id="clear">Clear</button>
+      <label class="inline" for="showfields"><input type="checkbox" id="showfields"> Show parsed fields</label>
+    </div>
+    <div class="row">
+      <label class="inline" for="zone">Zone for local-time readings in the ECMA-262 column</label>
+      <select id="zone"></select>
+    </div>
+    <p class="note" id="zonenote"></p>
+    <p class="status" id="status" role="status" aria-live="polite">Paste timestamps above, or load the examples.</p>
+  </div>
+</section>
+
+<section aria-labelledby="out-h">
+  <h2 id="out-h">Results</h2>
+  <p class="note" id="engine"></p>
+  <div class="panel">
+    <div class="tablewrap" tabindex="0" role="region" aria-label="Results, one row per timestamp">
+      <table id="out">
+        <caption class="visually-hidden">How each reader handles each timestamp</caption>
+        <thead><tr>
+          <th scope="col">Input</th>
+          <th scope="col">RFC 3339 (as updated by RFC 9557)</th>
+          <th scope="col">ECMA-262 Date Time String Format</th>
+          <th scope="col">Your browser, live: Date.parse</th>
+          <th scope="col">Python 3.14 rules: fromisoformat</th>
+          <th scope="col">Go time.Parse(time.RFC3339) rules</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+  <p class="note">The Python and Go columns are emulations of documented and source-read behaviour, checked against Python 3.14.8 and Go 1.27.2; no code is reproduced. The live column is the only one that runs a real parser, and it is your engine only.</p>
+</section>
+
+<section aria-labelledby="rules-h">
+  <h2 id="rules-h">How each column decides</h2>
+  <div class="panel">
+    <h3>RFC 3339 (as updated by RFC 9557)</h3>
+    <ul class="rules">
+      <li>The 5.6 ABNF: <code>date-time = full-date "T" full-time</code>, with a partial-time of <code>HH:MM:SS</code>, an optional <code>"." 1*DIGIT</code> fraction, then an offset.
+        <span class="quote">time-numoffset  = ("+" / "-") time-hour ":" time-minute</span>
+        <span class="quote">time-offset     = "Z" / time-numoffset</span></li>
+      <li>Lower case is allowed, upper case is what generators should send.
+        <span class="quote">NOTE: Per [ABNF] and ISO8601, the "T" and "Z" characters in this syntax may alternatively be lower case "t" or "z" respectively. ... Applications that generate this format SHOULD use upper case letters.</span></li>
+      <li>A space is outside the ABNF, and the NOTE permits it as an application choice. This page shows it that way, never as plain valid or plain invalid.
+        <span class="quote">Applications using this syntax may choose, for the sake of readability, to specify a full-date and full-time separated by (say) a space character.</span></li>
+      <li>5.7 caps the day by month and leap year, allows second 60 at a leap second (this page does not check the leap second table), and restricts the hour.
+        <span class="quote">this profile of ISO 8601 only allows values between "00" and "23" for the hour in order to reduce confusion.</span></li>
+      <li>RFC 3339 is updated by RFC 9557 (rfc-editor.org metadata: updated_by RFC9557). Section 2.2 rewrites 4.3, so <code>Z</code>, not <code>-00:00</code>, now marks a known UTC time with an unknown local offset; <code>-00:00</code> is still grammatical.
+        <span class="quote">If the time in UTC is known, but the offset to local time is unknown, this can be represented with an offset of "Z".</span></li>
+      <li>Bracketed suffixes such as <code>[Europe/Paris]</code> are RFC 9557 annotations and out of scope for every column here.</li>
+    </ul>
+    <p class="note">Sources: https://www.rfc-editor.org/rfc/rfc3339.txt, https://www.rfc-editor.org/rfc/rfc3339.json, https://www.rfc-editor.org/rfc/rfc9557.txt</p>
+
+    <h3>ECMA-262 Date Time String Format (21.4.1.32) and Date.parse (21.4.3.2)</h3>
+    <ul class="rules">
+      <li>Date-only forms are <code>YYYY</code>, <code>YYYY-MM</code> and <code>YYYY-MM-DD</code>. A date-time form adds <code>THH:mm</code>, <code>THH:mm:ss</code> or <code>THH:mm:ss.sss</code>, then an optional <code>Z</code> or <code>+HH:mm</code> / <code>-HH:mm</code>. The <code>T</code> and <code>Z</code> are upper case, and <code>sss</code> is exactly three digits.</li>
+      <li>Each element has bounds: month 01 to 12, day 01 to 31, hour 00 to 24, minutes and seconds 00 to 59. Note 1 says <code>24:00</code> is the midnight that ends a day. Because the day bound is 01 to 31 for every month, <code>2024-02-30</code> passes the format check.</li>
+      <li>Expanded years are a sign and six digits; <code>-000000</code> is invalid.</li>
+      <li>With no offset, date-only forms are read as UTC and date-time forms as local time. A string outside the format may be handled by implementation-specific heuristics, so the live column on such a string describes your engine only.</li>
+      <li>Note 2 says the format does not support RFC 9557 time zone name annotations.</li>
+      <li>The local reading uses the zone you pick above. <code>Date.parse</code> itself always uses the host zone, and a page cannot change that zone for it.</li>
+    </ul>
+    <p class="note">Source, paraphrased: https://tc39.es/ecma262/#sec-date-time-string-format and https://tc39.es/ecma262/#sec-date.parse</p>
+
+    <h3>Python 3.14 rules: datetime.fromisoformat</h3>
+    <ul class="rules">
+      <li>The Python documentation says it accepts any valid ISO 8601 format with listed exceptions: offsets may have fractional seconds; the <code>T</code> may be any single character; fractional hours and minutes are not supported; reduced precision dates (<code>YYYY-MM</code>, <code>YYYY</code>), extended years and ordinal dates (<code>YYYY-OOO</code>) are not supported. It broadened in 3.11; before that it only read what <code>isoformat()</code> writes.</li>
+      <li>Behaviour drifts between releases. Measured here: Python 3.11.9 rejects <code>2024-01-15T24:00:00Z</code> and 3.14.8 accepts it as midnight of the next day (changelog entry gh-102450). Python 3.11.9 returns 10:00:00.500000 for <code>2024-01-15T10.5</code>, which 3.14.8 rejects.</li>
+      <li>A string with no offset gives a naive datetime: it has no instant until the reader assumes a zone.</li>
+    </ul>
+    <p class="note">Sources: https://docs.python.org/3/library/datetime.html and https://docs.python.org/3/whatsnew/changelog.html</p>
+
+    <h3>Go time.Parse(time.RFC3339) rules</h3>
+    <ul class="rules">
+      <li>Go's own documentation says the RFC layouts, when parsing, do not take every RFC form and take some forms the RFCs do not define.
+        <span class="quote">when used with time.Parse they do not accept all the time formats permitted by the RFCs and they do accept time formats not formally defined.</span></li>
+      <li><code>Parse</code> tries a strict fast path first, then falls back to the general layout parser. The fallback is what accepts a one-digit hour, a comma fraction and offsets of <code>+24:00</code> or <code>+05:60</code>:
+        <span class="quote">The range test use &gt; rather than &gt;=, as some people do write offsets of 24 hours or 60 minutes or 60 seconds.</span></li>
+      <li>The literal <code>T</code> and an upper case <code>Z</code> or a <code>+hh:mm</code> offset are required. There is no date-only form, and an offset without a colon is rejected. Second 60 and hour 24 are out of range.</li>
+      <li>The source notes that strict RFC 3339 checking is switched off for now (go.dev/issue/54580).</li>
+    </ul>
+    <p class="note">Sources: https://raw.githubusercontent.com/golang/go/master/src/time/format.go and https://raw.githubusercontent.com/golang/go/master/src/time/format_rfc3339.go</p>
+  </div>
+  <p>This is an independent tool. It is not affiliated with or endorsed by the IETF, Ecma International, the Python Software Foundation or the Go project. Their documents are cited as the rules each column follows.</p>
+</section>
+
+<section aria-labelledby="st-h">
+  <h2 id="st-h">Self test</h2>
+  <p>Runs on load and on demand, against the same code that fills the table: every worked example through the Python and Go emulations (expected values measured on Python 3.14.8 and Go 1.27.2), the RFC 3339 and ECMA-262 validators, and a positive control written to fail. The live column is never asserted, because it is your engine.</p>
+  <div class="row"><button type="button" id="selftest">Run self test</button></div>
+  <p class="status" id="st-summary" role="status" aria-live="polite">Not run yet.</p>
+  <details>
+    <summary>Show every check</summary>
+    <div class="tablewrap" tabindex="0" role="region" aria-label="Self test results">
+      <table id="st-table"><caption class="visually-hidden">Self test results</caption>
+        <thead><tr><th scope="col">Check</th><th scope="col">Expected</th><th scope="col">Got</th><th scope="col">Result</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </details>
+</section>
+</main>
+
+<footer>
+  <p>MIT licensed. Copyright (c) 2026 0xelitesystem. Source: https://github.com/0xelitesystem/timestamp-format-parser-differential</p>
+  <p>Independent tool, not affiliated with the IETF, Ecma International, the Python Software Foundation or the Go project. Nothing you paste leaves this page.</p>
+  <p><a href="https://elitesystem.ai">elitesystem.ai</a></p>
+</footer>
+
+</div>
+
+<script>
+/* ==== CORE START ==== */
+var TS = (function () {
+"use strict";
+
+/* ---------- calendar arithmetic (proleptic Gregorian, any integer year) ---------- */
+function isLeap(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
+function daysIn(m, y) { return m === 2 ? (isLeap(y) ? 29 : 28) : ([4, 6, 9, 11].indexOf(m) >= 0 ? 30 : 31); }
+function fdiv(a, b) { return Math.floor(a / b); }
+function daysFromCivil(y, m, d) {
+  y -= m <= 2 ? 1 : 0;
+  var era = fdiv(y, 400), yoe = y - era * 400, mp = (m + 9) % 12;
+  var doy = fdiv(153 * mp + 2, 5) + d - 1;
+  var doe = yoe * 365 + fdiv(yoe, 4) - fdiv(yoe, 100) + doy;
+  return era * 146097 + doe - 719468;
+}
+function civilFromDays(z) {
+  z += 719468;
+  var era = fdiv(z, 146097), doe = z - era * 146097;
+  var yoe = fdiv(doe - fdiv(doe, 1460) + fdiv(doe, 36524) - fdiv(doe, 146096), 365);
+  var doy = doe - (365 * yoe + fdiv(yoe, 4) - fdiv(yoe, 100));
+  var mp = fdiv(5 * doy + 2, 153), d = doy - fdiv(153 * mp + 2, 5) + 1, m = mp < 10 ? mp + 3 : mp - 9;
+  return [yoe + era * 400 + (m <= 2 ? 1 : 0), m, d];
+}
+function pad(n, w) { var s = String(Math.abs(n)); while (s.length < w) { s = "0" + s; } return s; }
+/* An instant is whole epoch seconds plus a string of fraction digits (no trailing zeros). */
+function mkInstant(y, mo, d, h, mi, s, frac, offsetSec) {
+  return { sec: daysFromCivil(y, mo, d) * 86400 + h * 3600 + mi * 60 + s - offsetSec, frac: trimFrac(frac || "") };
+}
+function trimFrac(f) { var e = f.length; while (e > 0 && f.charCodeAt(e - 1) === 48) { e--; } return f.slice(0, e); }
+function fmtYear(y) { return y >= 0 && y <= 9999 ? pad(y, 4) : (y < 0 ? "-" : "+") + pad(y, 6); }
+function fmtInstant(inst) {
+  var days = fdiv(inst.sec, 86400), rem = inst.sec - days * 86400, c = civilFromDays(days);
+  return fmtYear(c[0]) + "-" + pad(c[1], 2) + "-" + pad(c[2], 2) + "T" + pad(fdiv(rem, 3600), 2) + ":" + pad(fdiv(rem % 3600, 60), 2) + ":" + pad(rem % 60, 2) + (inst.frac ? "." + inst.frac : "") + "Z";
+}
+function sameInstant(a, b) { return a.sec === b.sec && a.frac === b.frac; }
+function isD(c) { return c >= "0" && c <= "9" && c.length === 1; }
+function digitsAt(s, i, n) {
+  if (i + n > s.length) { return null; }
+  for (var k = 0; k < n; k++) { if (!isD(s.charAt(i + k))) { return null; } }
+  return parseInt(s.substr(i, n), 10);
+}
+function show(ch) {
+  if (ch === undefined || ch === "") { return "end of input"; }
+  var cp = ch.codePointAt(0);
+  if (cp > 32 && cp < 127) { return "\"" + ch + "\""; }
+  return "U+" + cp.toString(16).toUpperCase().padStart(4, "0");
+}
+
+/* ---------- RFC 3339 section 5.6 ABNF, 5.7 restrictions, as updated by RFC 9557 ---------- */
+function rfc3339(s) {
+  var r = { verdict: "invalid", reason: "", notes: [], inst: null, fields: null };
+  var i = 0;
+  function fail(msg) { r.verdict = "invalid"; r.reason = msg; r.inst = null; return r; }
+  function num(n, name) {
+    var v = digitsAt(s, i, n);
+    if (v === null) { return { err: name + ": expected " + n + " DIGIT at position " + (i + 1) + ", found " + show(s.charAt(i)) }; }
+    i += n; return { v: v };
+  }
+  function lit(chs, name) {
+    var c = s.charAt(i);
+    if (chs.indexOf(c) < 0 || c === "") { return "expected " + name + " at position " + (i + 1) + ", found " + show(c); }
+    i++; return null;
+  }
+  var y = num(4, "date-fullyear"); if (y.err) { return fail(y.err); }
+  var e = lit("-", "\"-\""); if (e) { return fail(e); }
+  var mo = num(2, "date-month"); if (mo.err) { return fail(mo.err); }
+  e = lit("-", "\"-\""); if (e) { return fail(e); }
+  var d = num(2, "date-mday"); if (d.err) { return fail(d.err); }
+  if (mo.v < 1 || mo.v > 12) { return fail("date-month " + pad(mo.v, 2) + " is outside 01 to 12"); }
+  if (d.v < 1 || d.v > daysIn(mo.v, y.v)) { return fail("date-mday " + pad(d.v, 2) + " is outside 01 to " + daysIn(mo.v, y.v) + " for " + pad(y.v, 4) + "-" + pad(mo.v, 2) + " (5.7)"); }
+  if (i === s.length) {
+    r.verdict = "full-date"; r.reason = "Matches full-date only. A date-time needs \"T\", a partial-time and an offset.";
+    r.fields = { year: y.v, month: mo.v, day: d.v }; return r;
+  }
+  var sep = s.charAt(i), space = false;
+  if (sep === "T") { i++; }
+  else if (sep === "t") { i++; r.notes.push("Lower case \"t\" is allowed by the 5.6 NOTE; generators SHOULD use upper case."); }
+  else if (sep === " ") { i++; space = true; }
+  else { return fail("expected \"T\" at position " + (i + 1) + ", found " + show(sep)); }
+  var h = num(2, "time-hour"); if (h.err) { return fail(h.err); }
+  e = lit(":", "\":\""); if (e) { return fail(e); }
+  var mi = num(2, "time-minute"); if (mi.err) { return fail(mi.err); }
+  e = lit(":", "\":\""); if (e) { return fail(e); }
+  var se = num(2, "time-second"); if (se.err) { return fail(se.err); }
+  var frac = "";
+  if (s.charAt(i) === ".") {
+    i++; var st = i;
+    while (isD(s.charAt(i))) { i++; }
+    if (i === st) { return fail("time-secfrac: \".\" must be followed by at least one DIGIT (position " + (i + 1) + ")"); }
+    frac = s.slice(st, i);
+  } else if (s.charAt(i) === ",") { return fail("time-secfrac uses \".\" only; found \",\" at position " + (i + 1)); }
+  var off = s.charAt(i), offSec = 0, offText;
+  if (off === "Z" || off === "z") {
+    i++; offText = off;
+    if (off === "z") { r.notes.push("Lower case \"z\" is allowed by the 5.6 NOTE; generators SHOULD use upper case."); }
+  } else if (off === "+" || off === "-") {
+    i++;
+    var oh = num(2, "time-numoffset hour"); if (oh.err) { return fail(oh.err); }
+    e = lit(":", "\":\" in time-numoffset"); if (e) { return fail(e); }
+    var om = num(2, "time-numoffset minute"); if (om.err) { return fail(om.err); }
+    if (oh.v > 23) { return fail("offset hour " + pad(oh.v, 2) + " is outside 00 to 23 (time-numoffset uses time-hour)"); }
+    if (om.v > 59) { return fail("offset minute " + pad(om.v, 2) + " is outside 00 to 59"); }
+    offSec = (off === "-" ? -1 : 1) * (oh.v * 3600 + om.v * 60);
+    offText = off + pad(oh.v, 2) + ":" + pad(om.v, 2);
+    if (offText === "-00:00") { r.notes.push("-00:00 is grammatically valid; it is no longer the recommended unknown-offset marker (RFC 9557 2.2 now uses \"Z\" for that)."); }
+  } else {
+    return fail("time-offset: expected \"Z\" or \"+hh:mm\" / \"-hh:mm\" at position " + (i + 1) + ", found " + show(off));
+  }
+  if (i !== s.length) {
+    if (s.charAt(i) === "[") { r.notes.push("A bracketed suffix is an RFC 9557 annotation. It is out of scope for every column on this page."); }
+    return fail("unexpected " + show(s.charAt(i)) + " at position " + (i + 1) + " after the offset");
+  }
+  if (h.v > 23) { return fail("time-hour " + pad(h.v, 2) + " is outside 00 to 23 (5.7: this profile only allows 00 to 23)"); }
+  if (mi.v > 59) { return fail("time-minute " + pad(mi.v, 2) + " is outside 00 to 59"); }
+  if (se.v > 60) { return fail("time-second " + pad(se.v, 2) + " is outside 00 to 60"); }
+  r.fields = { year: y.v, month: mo.v, day: d.v, hour: h.v, minute: mi.v, second: se.v, fraction: frac, offset: offText };
+  if (se.v === 60) {
+    r.notes.push("Second 60 is grammatically allowed (5.7) and only valid at an announced leap second; this page does not check the leap second table. No POSIX instant is shown.");
+  } else {
+    r.inst = mkInstant(y.v, mo.v, d.v, h.v, mi.v, se.v, frac, offSec);
+  }
+  if (space) {
+    r.verdict = "note";
+    r.reason = "A space separator is outside the date-time ABNF; the 5.6 NOTE permits it as an application choice.";
+  } else { r.verdict = "valid"; }
+  return r;
+}
+
+/* ---------- ECMA-262 21.4.1.32 Date Time String Format and 21.4.3.2 Date.parse ---------- */
+var MAX_TV = 8.64e15;
+function ecma(s) {
+  var r = { conforms: false, form: "", reason: "", notes: [], fields: null, utc: null, local: null, outOfRange: false };
+  var i = 0;
+  function fail(msg) { r.conforms = false; r.reason = msg; return r; }
+  var y, sign = "";
+  if (s.charAt(0) === "+" || s.charAt(0) === "-") {
+    sign = s.charAt(0); y = digitsAt(s, 1, 6);
+    if (y === null) { return fail("an expanded year is \"+\" or \"-\" followed by exactly six digits"); }
+    if (sign === "-" && y === 0) { return fail("-000000 is invalid (21.4.1.32.1: year 0 must be written +000000)"); }
+    if (sign === "-") { y = -y; }
+    i = 7;
+  } else {
+    y = digitsAt(s, 0, 4);
+    if (y === null) { return fail("YYYY must be four digits (or an expanded year)"); }
+    i = 4;
+  }
+  var mo = 1, d = 1, hasTime = false, h = 0, mi = 0, se = 0, ms = 0, off = null, offSec = 0;
+  if (s.charAt(i) === "-") {
+    mo = digitsAt(s, i + 1, 2); if (mo === null) { return fail("MM must be two digits after \"-\" at position " + (i + 1)); }
+    i += 3;
+    if (s.charAt(i) === "-") {
+      d = digitsAt(s, i + 1, 2); if (d === null) { return fail("DD must be two digits after \"-\" at position " + (i + 1)); }
+      i += 3;
+    }
+  }
+  if (i < s.length && s.charAt(i) === "T") {
+    hasTime = true;
+    h = digitsAt(s, i + 1, 2); if (h === null) { return fail("HH must be two digits after \"T\""); }
+    if (s.charAt(i + 3) !== ":") { return fail("expected \":\" after HH at position " + (i + 4)); }
+    mi = digitsAt(s, i + 4, 2); if (mi === null) { return fail("mm must be two digits"); }
+    i += 6;
+    if (s.charAt(i) === ":") {
+      se = digitsAt(s, i + 1, 2); if (se === null) { return fail("ss must be two digits"); }
+      i += 3;
+      if (s.charAt(i) === ".") {
+        ms = digitsAt(s, i + 1, 3);
+        if (ms === null || isD(s.charAt(i + 4))) { return fail("sss must be exactly three digits"); }
+        i += 4;
+      }
+    }
+    var c = s.charAt(i);
+    if (c === "Z") { off = "Z"; i++; }
+    else if (c === "+" || c === "-") {
+      var oh = digitsAt(s, i + 1, 2), om = digitsAt(s, i + 4, 2);
+      if (oh === null || s.charAt(i + 3) !== ":" || om === null) { return fail("the offset must be \"Z\" or \"+HH:mm\" / \"-HH:mm\""); }
+      if (oh > 23 || om > 59) { return fail("offset " + s.substr(i, 6) + " is out of bounds (21.4.1.33 Hour is 00 to 23, MinuteSecond 00 to 59)"); }
+      off = s.substr(i, 6); offSec = (c === "-" ? -1 : 1) * (oh * 3600 + om * 60); i += 6;
+    }
+  }
+  if (i !== s.length) {
+    var at = s.charAt(i);
+    if (at === "T" || at === "t" || at === " ") { return fail("not this format at position " + (i + 1) + " (" + show(at) + "); only an upper case \"T\" starts the time"); }
+    return fail("unexpected " + show(at) + " at position " + (i + 1));
+  }
+  if (mo < 1 || mo > 12) { return fail("MM " + pad(mo, 2) + " is outside 01 to 12"); }
+  if (d < 1 || d > 31) { return fail("DD " + pad(d, 2) + " is outside 01 to 31"); }
+  if (h > 24) { return fail("HH " + pad(h, 2) + " is outside 00 to 24"); }
+  if (mi > 59) { return fail("mm " + pad(mi, 2) + " is outside 00 to 59"); }
+  if (se > 59) { return fail("ss " + pad(se, 2) + " is outside 00 to 59"); }
+  r.conforms = true;
+  r.form = hasTime ? "date-time" : "date-only";
+  r.fields = { year: y, month: mo, day: d, hour: h, minute: mi, second: se, millisecond: ms, offset: off };
+  if (d > daysIn(mo, y)) {
+    r.notes.push("Day " + pad(d, 2) + " is within element bounds (01 to 31), so the format check passes; the spec's MakeDay carries it into the next month. This is the format check, not your engine.");
+  }
+  var odd24 = h === 24 && (mi || se || ms);
+  if (h === 24 && !odd24) { r.notes.push("24:00 is the midnight that ends this day (Note 1), the same instant as 00:00 the next day."); }
+  if (odd24) {
+    r.odd24 = true;
+    r.notes.push("HH 24 with non-zero minutes, seconds or milliseconds: each element is in bounds, but Note 1 describes only 24:00, so this page computes no instant. Check the live column.");
+    return r;
+  }
+  var days = daysFromCivil(y, mo, 1) + d - 1;
+  var wall = days * 86400000 + h * 3600000 + mi * 60000 + se * 1000 + ms;
+  if (off !== null || !hasTime) {
+    var t = wall - offSec * 1000;
+    if (Math.abs(t) > MAX_TV) { r.outOfRange = true; r.notes.push("This instant is outside the time value range (8.64e15 ms), so Date.parse must return NaN."); }
+    else { r.utc = t; }
+    if (!hasTime) { r.notes.push("Date-only form with no offset: read as UTC (21.4.3.2)."); }
+  } else {
+    r.local = { wall: wall };
+    r.notes.push("Date-time form with no offset: read as local time (21.4.3.2).");
+  }
+  if (sign) { r.notes.push("Expanded year " + sign + pad(Math.abs(y), 6) + "."); }
+  return r;
+}
+function msToInstant(t) {
+  var sec = Math.floor(t / 1000), ms = t - sec * 1000;
+  return { sec: sec, frac: trimFrac(pad(ms, 3)) };
+}
+
+/* ---------- Python 3.14 datetime.fromisoformat, an emulation of the C implementation's documented and measured rules ---------- */
+function utf8(s) { return Array.prototype.slice.call(new TextEncoder().encode(s)); }
+function codePoints(s) { var out = []; for (var ch of s) { out.push(ch); } return out; }
+function isSurrogate(ch) { var c = ch.charCodeAt(0); return ch.length === 1 && c >= 0xD800 && c <= 0xDFFF; }
+function pyRepr(s) {
+  var q = s.indexOf("'") >= 0 && s.indexOf("\"") < 0 ? "\"" : "'";
+  var out = q;
+  for (var ch of s) {
+    var c = ch.codePointAt(0);
+    if (ch === q || ch === "\\") { out += "\\" + ch; }
+    else if (c === 10) { out += "\\n"; } else if (c === 13) { out += "\\r"; } else if (c === 9) { out += "\\t"; }
+    else if (c < 32 || c === 127) { out += "\\x" + c.toString(16).padStart(2, "0"); }
+    else if (c === 0xFEFF || (c >= 0x80 && c <= 0xA0) || c === 0xAD || (c >= 0x2000 && c <= 0x200F) || (c >= 0x2028 && c <= 0x202F)) { out += c > 0xFF ? "\\u" + c.toString(16).padStart(4, "0") : "\\x" + c.toString(16); }
+    else { out += ch; }
+  }
+  return out + q;
+}
+function python(input) {
+  var INVALID = { ok: false, err: "Invalid isoformat string: " + pyRepr(input) };
+  var cps = codePoints(input);
+  if (cps.length < 7) { return INVALID; }
+  var lone = 0;
+  [7, 8, 10].some(function (p) { if (p > cps.length) { return true; } if (cps[p] && isSurrogate(cps[p])) { lone = p; return true; } return false; });
+  if (lone) { cps[lone] = "T"; }
+  if (cps.some(isSurrogate)) { return INVALID; }
+  var b = utf8(cps.join("")), len = b.length;
+  function at(k) { return k < len ? b[k] : 0; }
+  function dig(k) { var c = at(k); return c >= 48 && c <= 57; }
+  function digits(p, n) { var v = 0; for (var k = 0; k < n; k++) { if (!dig(p + k)) { return null; } v = v * 10 + at(p + k) - 48; } return v; }
+  var DASH = 45, W = 87;
+  /* where the date ends */
+  var sepLoc;
+  if (len === 7) { sepLoc = 7; }
+  else if (at(4) === DASH) {
+    if (at(5) === W) {
+      if (len > 8 && at(8) === DASH) {
+        if (len === 9) { sepLoc = -1; }
+        else if (len > 10 && dig(10)) { sepLoc = 8; }
+        else { sepLoc = 10; }
+      } else { sepLoc = 8; }
+    } else { sepLoc = 10; }
+  } else if (at(4) === W) {
+    var idx = 7;
+    while (idx < len && dig(idx)) { idx++; }
+    sepLoc = idx < 9 ? idx : (idx % 2 === 0 ? 7 : 8);
+  } else { sepLoc = 8; }
+  var dlen = sepLoc < 0 ? Infinity : sepLoc;
+  /* date */
+  var year, month, day, p = 0;
+  year = digits(0, 4); if (year === null) { return INVALID; }
+  p = 4;
+  var useSep = at(p) === DASH; if (useSep) { p++; }
+  if (at(p) === W) {
+    p++;
+    var wk = digits(p, 2); if (wk === null) { return INVALID; }
+    p += 2;
+    var wd = 1;
+    if (p < dlen) {
+      if (useSep) { if (at(p) !== DASH) { return INVALID; } p++; }
+      wd = digits(p, 1); if (wd === null) { return INVALID; }
+    }
+    if (year < 1 || year > 9999) { return INVALID; }
+    var jan1 = daysFromCivil(year, 1, 1), jwd = ((jan1 % 7) + 7 + 3) % 7;
+    if (wk <= 0 || wk >= 53) {
+      var okWeek = wk === 53 && (jwd === 3 || (jwd === 2 && isLeap(year)));
+      if (!okWeek) { return INVALID; }
+    }
+    if (wd <= 0 || wd >= 8) { return INVALID; }
+    var mon1 = jan1 - jwd + (jwd > 3 ? 7 : 0);
+    var c = civilFromDays(mon1 + (wk - 1) * 7 + wd - 1);
+    year = c[0]; month = c[1]; day = c[2];
+  } else {
+    month = digits(p, 2); if (month === null) { return INVALID; }
+    p += 2;
+    if (useSep) { if (at(p) !== DASH) { return INVALID; } p++; }
+    day = digits(p, 2); if (day === null) { return INVALID; }
+  }
+  if (sepLoc < 0) { return INVALID; }
+  var hour = 0, minute = 0, second = 0, micro = 0, hasTz = false, tzSec = 0, tzUs = 0;
+  if (len > sepLoc) {
+    p = sepLoc;
+    var lead = at(p);
+    if ((lead & 0x80) === 0) { p += 1; } else if ((lead & 0xF0) === 0xE0) { p += 3; } else if ((lead & 0xF0) === 0xF0) { p += 4; } else { p += 2; }
+    var end = len;
+    /* HH[:?MM[:?SS]][{.,}f+] between start and stop */
+    var hms = function (start, stop) {
+      var vals = [0, 0, 0], q = start, hasSepC = true;
+      for (var k = 0; k < 3; k++) {
+        var v = digits(q, 2); if (v === null) { return { rv: -3 }; }
+        vals[k] = v; q += 2;
+        var ch = at(q); q++;
+        if (k === 0) { hasSepC = ch === 58; }
+        if (ch === 46 || ch === 44) {
+          if (k < 2) { return { rv: -3 }; }
+          if (q >= stop) { return { rv: -3 }; }
+          break;
+        } else if (q >= stop) {
+          return { rv: ch !== 0 ? 1 : 0, vals: vals, us: 0 };
+        } else if (hasSepC && ch === 58) {
+          if (k === 2) { return { rv: -4 }; }
+          continue;
+        } else if (!hasSepC) {
+          q--;
+        } else {
+          return { rv: -4 };
+        }
+      }
+      var remains = stop - q, toParse = remains >= 6 ? 6 : remains;
+      var us = digits(q, toParse); if (us === null) { return { rv: -3 }; }
+      q += toParse;
+      if (toParse < 6) { us *= [100000, 10000, 1000, 100, 10][toParse - 1]; }
+      while (dig(q)) { q++; }
+      return { rv: at(q) !== 0 ? 1 : 0, vals: vals, us: us };
+    };
+    var tzPos = p;
+    do { var tc = at(tzPos); if (tc === 90 || tc === 43 || tc === DASH) { break; } } while (++tzPos < end);
+    var t1 = hms(p, tzPos);
+    if (t1.rv < 0) { return INVALID; }
+    hour = t1.vals[0]; minute = t1.vals[1]; second = t1.vals[2]; micro = t1.us;
+    if (tzPos === end) {
+      if (t1.rv === 1) { return INVALID; }
+    } else if (at(tzPos) === 90) {
+      if (at(tzPos + 1) !== 0) { return INVALID; }
+      hasTz = true;
+    } else {
+      var sg = at(tzPos) === DASH ? -1 : 1;
+      var t2 = hms(tzPos + 1, end);
+      if (t2.rv !== 0) { return INVALID; }
+      hasTz = true;
+      tzSec = sg * (t2.vals[0] * 3600 + t2.vals[1] * 60 + t2.vals[2]);
+      tzUs = sg * t2.us;
+    }
+  }
+  if (hasTz && Math.abs(tzSec * 1e6 + tzUs) >= 86400e6) {
+    var tdTot = tzSec * 1e6 + tzUs, tdDays = Math.floor(tdTot / 86400e6), tdRem = tdTot - tdDays * 86400e6, tdParts = [];
+    if (tdDays) { tdParts.push("days=" + tdDays); }
+    if (Math.floor(tdRem / 1e6)) { tdParts.push("seconds=" + Math.floor(tdRem / 1e6)); }
+    if (tdRem % 1e6) { tdParts.push("microseconds=" + (tdRem % 1e6)); }
+    return { ok: false, err: "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(" + tdParts.join(", ") + ")" };
+  }
+  var nextDay = false;
+  if (hour === 24 && month >= 1 && month <= 12) {
+    var dim = daysIn(month, year);
+    if (day <= dim) {
+      if (minute === 0 && second === 0 && micro === 0) {
+        hour = 0; day += 1; nextDay = true;
+        if (day > dim) { day = 1; month += 1; if (month > 12) { month = 1; year += 1; } }
+      } else {
+        return { ok: false, err: "minute, second, and microsecond must be 0 when hour is 24" };
+      }
+    }
+  }
+  if (year < 1 || year > 9999) { return { ok: false, err: "year must be in 1..9999, not " + year }; }
+  if (month < 1 || month > 12) { return { ok: false, err: "month must be in 1..12, not " + month }; }
+  if (day < 1 || day > daysIn(month, year)) { return { ok: false, err: "day " + day + " must be in range 1.." + daysIn(month, year) + " for month " + month + " in year " + year }; }
+  if (hour > 23) { return { ok: false, err: "hour must be in 0..23, not " + hour }; }
+  if (minute > 59) { return { ok: false, err: "minute must be in 0..59, not " + minute }; }
+  if (second > 59) { return { ok: false, err: "second must be in 0..59, not " + second }; }
+  var iso = pad(year, 4) + "-" + pad(month, 2) + "-" + pad(day, 2) + "T" + pad(hour, 2) + ":" + pad(minute, 2) + ":" + pad(second, 2) + (micro ? "." + pad(micro, 6) : "");
+  var res = { ok: true, aware: hasTz, nextDay: nextDay, fields: { year: year, month: month, day: day, hour: hour, minute: minute, second: second, microsecond: micro } };
+  if (hasTz) {
+    var tot = tzSec * 1e6 + tzUs, neg = tot < 0, a = Math.abs(tot);
+    var oh = Math.floor(a / 3600e6), om = Math.floor((a % 3600e6) / 60e6), os = Math.floor((a % 60e6) / 1e6), ou = a % 1e6;
+    var offStr = (neg ? "-" : "+") + pad(oh, 2) + ":" + pad(om, 2) + (os || ou ? ":" + pad(os, 2) : "") + (ou ? "." + pad(ou, 6) : "");
+    iso += offStr;
+    res.fields.utcoffset = offStr;
+    /* instant = local wall time minus the offset, in microseconds */
+    var base = daysFromCivil(year, month, day) * 86400 + hour * 3600 + minute * 60 + second;
+    var usTotal = micro - tzUs, secAdj = base - tzSec + Math.floor(usTotal / 1e6), usRem = ((usTotal % 1e6) + 1e6) % 1e6;
+    res.inst = { sec: secAdj, frac: trimFrac(pad(usRem, 6)) };
+  }
+  res.iso = iso;
+  return res;
+}
+
+/* ---------- Go time.Parse(time.RFC3339, s): fast path parseRFC3339, then the general parse() ---------- */
+function goQuote(bytes) {
+  var out = "\"";
+  for (var k = 0; k < bytes.length; k++) {
+    var c = bytes[k];
+    if (c >= 0x80 || c < 32) { out += "\\x" + c.toString(16).padStart(2, "0"); }
+    else { var ch = String.fromCharCode(c); out += (ch === "\"" || ch === "\\") ? "\\" + ch : ch; }
+  }
+  return out + "\"";
+}
+function goParse(input) {
+  var b = utf8(input);
+  function isDig(arr, k) { return k < arr.length && arr[k] >= 48 && arr[k] <= 57; }
+  function finish(y, mo, d, h, mi, s, ns, off) {
+    var frac = ns ? pad(ns, 9) : "";
+    var inst = mkInstant(y, mo, d, h, mi, s, frac, off);
+    return { ok: true, inst: inst, offset: off === 0 ? "Z" : (off < 0 ? "-" : "+") + pad(Math.floor(Math.abs(off) / 3600), 2) + ":" + pad(Math.floor((Math.abs(off) % 3600) / 60), 2), fields: { year: y, month: mo, day: d, hour: h, minute: mi, second: s, nanosecond: ns } };
+  }
+  function nanos(v, n) {
+    if (n > 10) { n = 10; }
+    var x = 0;
+    for (var k = 1; k < n; k++) { x = x * 10 + v[k] - 48; }
+    for (var j = 0; j < 10 - n; j++) { x *= 10; }
+    return x;
+  }
+  /* fast path */
+  var fast = (function () {
+    var ok = true;
+    function pu(a, z, min, max) {
+      var x = 0;
+      for (var k = a; k < z; k++) { var c = b[k]; if (c < 48 || c > 57) { ok = false; return min; } x = x * 10 + c - 48; }
+      if (x < min || x > max) { ok = false; return min; }
+      return x;
+    }
+    if (b.length < 19) { return null; }
+    var y = pu(0, 4, 0, 9999), mo = pu(5, 7, 1, 12), d = pu(8, 10, 1, daysIn(mo, y)), h = pu(11, 13, 0, 23), mi = pu(14, 16, 0, 59), s = pu(17, 19, 0, 59);
+    if (!ok || !(b[4] === 45 && b[7] === 45 && b[10] === 84 && b[13] === 58 && b[16] === 58)) { return null; }
+    var rest = b.slice(19), ns = 0;
+    if (rest.length >= 2 && rest[0] === 46 && isDig(rest, 1)) {
+      var n = 2; while (n < rest.length && isDig(rest, n)) { n++; }
+      ns = nanos(rest, n); rest = rest.slice(n);
+    }
+    var off = 0;
+    if (!(rest.length === 1 && rest[0] === 90)) {
+      if (rest.length !== 6) { return null; }
+      var oh = 0, om = 0, k;
+      for (k = 1; k < 3; k++) { if (rest[k] < 48 || rest[k] > 57) { ok = false; } }
+      for (k = 4; k < 6; k++) { if (rest[k] < 48 || rest[k] > 57) { ok = false; } }
+      if (!ok) { return null; }
+      oh = (rest[1] - 48) * 10 + rest[2] - 48; om = (rest[4] - 48) * 10 + rest[5] - 48;
+      if (oh > 23 || om > 59) { return null; }
+      if (!((rest[0] === 45 || rest[0] === 43) && rest[3] === 58)) { return null; }
+      off = (oh * 60 + om) * 60; if (rest[0] === 45) { off = -off; }
+    }
+    return finish(y, mo, d, h, mi, s, ns, off);
+  })();
+  if (fast) { fast.path = "fast path (parseRFC3339)"; return fast; }
+  /* general parse() with layout 2006-01-02T15:04:05Z07:00 */
+  var CH = [["", "2006"], ["-", "01"], ["-", "02"], ["T", "15"], [":", "04"], [":", "05"], ["", "Z07:00"], ["", ""]];
+  var v = b, year = 0, month = -1, day = -1, hour = 0, min = 0, sec = 0, nsec = 0, zUTC = false, zoneOffset = -1;
+  function bad(hold, stdstr) { return { ok: false, err: "cannot parse " + goQuote(hold) + " as " + goQuote(utf8(stdstr)) }; }
+  function getnum(arr, fixed) {
+    if (!isDig(arr, 0)) { return { err: true, rest: arr }; }
+    if (!isDig(arr, 1)) { if (fixed) { return { err: true, rest: arr }; } return { n: arr[0] - 48, rest: arr.slice(1) }; }
+    return { n: (arr[0] - 48) * 10 + arr[1] - 48, rest: arr.slice(2) };
+  }
+  for (var ci = 0; ci < CH.length; ci++) {
+    var prefix = CH[ci][0], stdstr = CH[ci][1];
+    for (var k = 0; k < prefix.length; k++) {
+      if (v.length === 0 || v[0] !== prefix.charCodeAt(k)) { return bad(v, prefix); }
+      v = v.slice(1);
+    }
+    if (stdstr === "") {
+      if (v.length) { return { ok: false, err: "extra text: " + goQuote(v) }; }
+      break;
+    }
+    var hold = v, err = false, range = "", g;
+    if (stdstr === "2006") {
+      if (v.length < 4 || !isDig(v, 0)) { err = true; }
+      else {
+        for (var q = 0; q < 4; q++) { if (!isDig(v, q)) { err = true; } }
+        if (!err) { year = (v[0] - 48) * 1000 + (v[1] - 48) * 100 + (v[2] - 48) * 10 + v[3] - 48; }
+        v = v.slice(4);
+      }
+    } else if (stdstr === "01") {
+      g = getnum(v, true); err = !!g.err; v = g.rest; if (!err) { month = g.n; if (month <= 0 || month > 12) { range = "month"; } }
+    } else if (stdstr === "02") {
+      g = getnum(v, true); err = !!g.err; v = g.rest; if (!err) { day = g.n; }
+    } else if (stdstr === "15") {
+      g = getnum(v, false); err = !!g.err; v = g.rest; if (!err) { hour = g.n; if (hour >= 24) { range = "hour"; } }
+    } else if (stdstr === "04") {
+      g = getnum(v, true); err = !!g.err; v = g.rest; if (!err) { min = g.n; if (min >= 60) { range = "minute"; } }
+    } else if (stdstr === "05") {
+      g = getnum(v, true); err = !!g.err; v = g.rest;
+      if (!err) {
+        sec = g.n;
+        if (sec >= 60) { range = "second"; }
+        else if (v.length >= 2 && (v[0] === 46 || v[0] === 44) && isDig(v, 1)) {
+          var n2 = 2; while (n2 < v.length && isDig(v, n2)) { n2++; }
+          nsec = nanos(v, n2); v = v.slice(n2);
+        }
+      }
+    } else if (stdstr === "Z07:00") {
+      if (v.length >= 1 && v[0] === 90) { v = v.slice(1); zUTC = true; }
+      else if (v.length < 6 || v[3] !== 58) { err = true; }
+      else {
+        var sgn = v[0], hh = v.slice(1, 3), mm = v.slice(4, 6);
+        v = v.slice(6);
+        /* Go checks the offset range before it reports a digit error, so "+59:0 " is "out of range" */
+        var gh = getnum(hh, true), gm = gh.err ? null : getnum(mm, true);
+        var ohr = gh.err ? 0 : gh.n, omn = (gh.err || gm.err) ? 0 : gm.n;
+        if (gh.err || gm.err) { err = true; }
+        if (ohr > 24) { range = "time zone offset hour"; }
+        if (omn > 60) { range = "time zone offset minute"; }
+        if (!err) {
+          zoneOffset = (ohr * 60 + omn) * 60;
+          if (sgn === 45) { zoneOffset = -zoneOffset; } else if (sgn !== 43) { err = true; }
+        }
+      }
+    }
+    if (range) { return { ok: false, err: range + " out of range" }; }
+    if (err) { return bad(hold, stdstr); }
+  }
+  if (month < 0) { month = 1; }
+  if (day < 0) { day = 1; }
+  if (day < 1 || day > daysIn(month, year)) { return { ok: false, err: "day out of range" }; }
+  var res = finish(year, month, day, hour, min, sec, nsec, zUTC ? 0 : zoneOffset);
+  res.path = "general parse (fast path declined)";
+  return res;
+}
+
+/* ---------- row notes ---------- */
+function rowNotes(s) {
+  var notes = [];
+  if (s.charCodeAt(0) === 0xFEFF) { notes.push("Starts with a byte order mark (U+FEFF). Every parser here sees it as a character."); }
+  else if (/^\s/.test(s)) { notes.push("Leading whitespace. It is part of the string; no column trims it."); }
+  if (/\s$/.test(s)) { notes.push("Trailing whitespace. It is part of the string; no column trims it."); }
+  var odd = [];
+  for (var ch of s) { var c = ch.codePointAt(0); if (c > 126 || c < 32) { var u = "U+" + c.toString(16).toUpperCase().padStart(4, "0"); if (odd.indexOf(u) < 0) { odd.push(u); } } }
+  if (odd.length) { notes.push("Non-ASCII or control characters: " + odd.join(", ") + (odd.indexOf("U+2212") >= 0 ? ". U+2212 is the minus sign, not the ASCII hyphen-minus every grammar here requires" : "") + "."); }
+  if (/^\d{4}-\d{2}-\d{2}.24:00(:00(\.0+)?)?(Z|[+-]\d{2}(:?\d{2})?)?$/.test(s)) {
+    notes.push("Version drift: Python 3.11.9 rejected 24:00 (\"hour must be in 0..23\"); 3.14 accepts it as midnight of the next day. The CPython changelog entry is gh-102450.");
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}[.,]\d+$/.test(s)) {
+    notes.push("Version drift: Python 3.11.9 returned 10:00:00.500000 for 2024-01-15T10.5; 3.14 rejects a decimal mark on the hour.");
+  }
+  if (s.charAt(s.length - 1) === "]" && s.lastIndexOf("[", s.length - 2) > (s.length > 1 ? s.lastIndexOf("]", s.length - 2) : -1)) { notes.push("Bracketed suffix: an RFC 9557 annotation. ECMA-262 Note 2 says its format does not support these; out of scope for every column."); }
+  return notes;
+}
+
+/* ---------- self test (the Python and Go columns; the live column is never asserted) ---------- */
+var CASES = [
+  ["2024-01-15", "2024-01-15T00:00:00", "ERR cannot parse \"\" as \"T\""],
+  ["2024-01-15T10:00:00Z", "2024-01-15T10:00:00+00:00", "2024-01-15T10:00:00Z"],
+  ["2024-01-15T10:00:00", "2024-01-15T10:00:00", "ERR cannot parse \"\" as \"Z07:00\""],
+  ["2024-01-15 10:00:00Z", "2024-01-15T10:00:00+00:00", "ERR cannot parse \" 10:00:00Z\" as \"T\""],
+  ["2024-01-15t10:00:00Z", "2024-01-15T10:00:00+00:00", "ERR cannot parse \"t10:00:00Z\" as \"T\""],
+  ["2024-01-15T10:00:00z", "ERR", "ERR cannot parse \"z\" as \"Z07:00\""],
+  ["2024-01-15T10:00:00,5Z", "2024-01-15T10:00:00.500000+00:00", "2024-01-15T10:00:00.5Z"],
+  ["2024-01-15T10:00:00.123456789Z", "2024-01-15T10:00:00.123456+00:00", "2024-01-15T10:00:00.123456789Z"],
+  ["2024-01-15T10:00:00-05", "2024-01-15T10:00:00-05:00", "ERR cannot parse \"-05\" as \"Z07:00\""],
+  ["2024-01-15T10:00:00-0500", "2024-01-15T10:00:00-05:00", "ERR cannot parse \"-0500\" as \"Z07:00\""],
+  ["2024-01-15T10:00:00-05:00", "2024-01-15T10:00:00-05:00", "2024-01-15T15:00:00Z"],
+  ["2024-W03-1", "2024-01-15T00:00:00", "ERR cannot parse \"W03-1\" as \"01\""],
+  ["2024-015", "ERR", "ERR cannot parse \"5\" as \"-\""],
+  ["20240115T100000Z", "2024-01-15T10:00:00+00:00", "ERR cannot parse \"0115T100000Z\" as \"-\""],
+  ["2024-01-15T24:00:00Z", "2024-01-16T00:00:00+00:00", "ERR hour out of range"],
+  ["2024-01-15T10:00Z", "2024-01-15T10:00:00+00:00", "ERR cannot parse \"Z\" as \":\""],
+  ["2024-01-15T10:00:00-00:00", "2024-01-15T10:00:00+00:00", "2024-01-15T10:00:00Z"],
+  ["2024-01-15T10:00:00+24:00", "ERR", "2024-01-14T10:00:00Z"],
+  ["2024-01-15T10:00:00+05:60", "2024-01-15T10:00:00+06:00", "2024-01-15T04:00:00Z"],
+  ["2024-01-15T1:00:00Z", "ERR", "2024-01-15T01:00:00Z"],
+  ["2016-12-31T23:59:60Z", "ERR", "ERR second out of range"],
+  ["2024-02-30T10:00:00Z", "ERR", "ERR day out of range"],
+  ["2024-01", "ERR", "ERR cannot parse \"\" as \"-\""],
+  ["+002024-01-15T10:00:00Z", "ERR", "ERR cannot parse \"+002024-01-15T10:00:00Z\" as \"2006\""],
+  ["2024-01-15T10:00:00.5+05:30", "2024-01-15T10:00:00.500000+05:30", "2024-01-15T04:30:00.5Z"]
+];
+function pyOut(s) { var r = python(s); return r.ok ? r.iso : "ERR"; }
+function goOut(s) { var r = goParse(s); return r.ok ? fmtInstant(r.inst) : "ERR " + r.err; }
+function selfTest() {
+  var out = [];
+  function check(name, want, got) { out.push({ name: name, want: want, got: got, pass: want === got }); }
+  CASES.forEach(function (c) {
+    check("Python 3.14 rules: " + c[0], c[1], pyOut(c[0]));
+    check("Go RFC3339 rules: " + c[0], c[2], goOut(c[0]));
+  });
+  check("Python instant: 2024-01-15T10:00:00.5+05:30", "2024-01-15T04:30:00.5Z", fmtInstant(python("2024-01-15T10:00:00.5+05:30").inst));
+  check("Python error text: 2024-01-15T10:00:00+24:00", "offset must be a timedelta strictly between -timedelta(hours=24) and timedelta(hours=24), not datetime.timedelta(days=1)", python("2024-01-15T10:00:00+24:00").err);
+  check("Go error text: 2024-01-15T10:00:00+59:0 (range before digits)", "ERR time zone offset hour out of range", goOut("2024-01-15T10:00:00+59:0 "));
+  check("Python naive has no instant: 2024-01-15T10:00:00", "naive", python("2024-01-15T10:00:00").aware ? "aware" : "naive");
+  check("RFC 3339: lower case t and z are valid", "valid", rfc3339("2024-01-15t10:00:00z").verdict);
+  check("RFC 3339: space separator is outside the ABNF (NOTE)", "note", rfc3339("2024-01-15 10:00:00Z").verdict);
+  check("RFC 3339: hour 24 is invalid (5.7)", "invalid", rfc3339("2024-01-15T24:00:00Z").verdict);
+  check("RFC 3339: second 60 is grammatical", "valid", rfc3339("2016-12-31T23:59:60Z").verdict);
+  check("RFC 3339: Feb 30 is invalid (5.7)", "invalid", rfc3339("2024-02-30T10:00:00Z").verdict);
+  check("RFC 3339: -00:00 note (RFC 9557 2.2)", "true", String(rfc3339("2024-01-15T10:00:00-00:00").notes.some(function (n) { return n.indexOf("RFC 9557") >= 0; })));
+  check("RFC 3339: +24:00 offset is invalid", "invalid", rfc3339("2024-01-15T10:00:00+24:00").verdict);
+  check("RFC 3339: date only is full-date", "full-date", rfc3339("2024-01-15").verdict);
+  check("RFC 3339 instant: 2024-01-15T10:00:00-05:00", "2024-01-15T15:00:00Z", fmtInstant(rfc3339("2024-01-15T10:00:00-05:00").inst));
+  check("ECMA-262: date only is UTC", "2024-01-15T00:00:00Z", fmtInstant(msToInstant(ecma("2024-01-15").utc)));
+  check("ECMA-262: date-time without offset is local", "local", ecma("2024-01-15T10:00:00").local ? "local" : "utc");
+  check("ECMA-262: 2024-01 conforms", "true", String(ecma("2024-01").conforms));
+  check("ECMA-262: expanded year conforms", "true", String(ecma("+002024-01-15T10:00:00Z").conforms));
+  check("ECMA-262: -000000 is invalid", "false", String(ecma("-000000-01-01T00:00:00Z").conforms));
+  check("ECMA-262: comma decimal is outside the format", "false", String(ecma("2024-01-15T10:00:00,5Z").conforms));
+  check("ECMA-262: 24:00 conforms, next-day midnight", "2024-01-16T00:00:00Z", fmtInstant(msToInstant(ecma("2024-01-15T24:00:00Z").utc)));
+  check("ECMA-262: Feb 30 is in element bounds, rolls to Mar 1", "2024-03-01T10:00:00Z", fmtInstant(msToInstant(ecma("2024-02-30T10:00:00Z").utc)));
+  check("ECMA-262: sss must be three digits", "false", String(ecma("2024-01-15T10:00:00.5Z").conforms));
+  check("ECMA-262: space separator is outside the format", "false", String(ecma("2024-01-15 10:00:00Z").conforms));
+  out.push({ name: "Positive control: an assertion written to fail", want: "1", got: "2", pass: "1" === "2", control: true });
+  return out;
+}
+
+return { rfc3339: rfc3339, ecma: ecma, python: python, goParse: goParse, rowNotes: rowNotes, fmtInstant: fmtInstant, msToInstant: msToInstant, sameInstant: sameInstant, selfTest: selfTest, CASES: CASES, pyOut: pyOut, goOut: goOut, daysFromCivil: daysFromCivil };
+})();
+/* ==== CORE END ==== */
+(function () {
+"use strict";
+function $(id) { return document.getElementById(id); }
+function h(tag, attrs, kids) {
+  var e = document.createElement(tag);
+  if (attrs) { Object.keys(attrs).forEach(function (k) { var v = attrs[k]; if (v === null || v === undefined || v === false) { return; } if (k === "class") { e.className = v; } else if (k === "text") { e.textContent = v; } else { e.setAttribute(k, v === true ? "" : String(v)); } }); }
+  (kids || []).forEach(function (c) { if (c === null || c === undefined) { return; } e.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+  return e;
+}
+function badge(cls, text) { return h("span", { class: "badge " + cls, text: text }); }
+
+/* theme */
+var root = document.documentElement, tbtn = $("theme-toggle");
+function effective() { var t = root.getAttribute("data-theme"); if (t === "dark" || t === "light") { return t; } return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"; }
+function label() { tbtn.textContent = effective() === "dark" ? "Use light theme" : "Use dark theme"; }
+tbtn.addEventListener("click", function () {
+  var next = effective() === "dark" ? "light" : "dark";
+  root.setAttribute("data-theme", next);
+  try { localStorage.setItem("theme", next); } catch (e) {}
+  label();
+});
+label();
+
+/* zones */
+var hostZone = "";
+try { hostZone = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+var ZONES = ["UTC", "America/New_York", "America/Los_Angeles", "Europe/London", "Europe/Paris", "Asia/Kolkata", "Asia/Tokyo", "Australia/Sydney"];
+var zsel = $("zone");
+zsel.appendChild(h("option", { value: "", text: "Browser zone" + (hostZone ? " (" + hostZone + ")" : "") }));
+ZONES.forEach(function (z) { if (z !== hostZone) { zsel.appendChild(h("option", { value: z, text: z })); } });
+$("zonenote").textContent = "Your browser resolves its zone as " + (hostZone || "unknown") + ". Date.parse in the live column always uses that host zone; the picker only changes the ECMA-262 column's local reading.";
+$("engine").textContent = "Live column engine (your browser's user agent string): " + navigator.userAgent;
+
+var fmtCache = {};
+function offsetAt(zone, utcMs) {
+  var f = fmtCache[zone];
+  if (!f) { f = fmtCache[zone] = new Intl.DateTimeFormat("en-US", { timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }); }
+  var p = {}; f.formatToParts(new Date(utcMs)).forEach(function (x) { p[x.type] = x.value; });
+  var wall = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second);
+  return wall - Math.floor(utcMs / 1000) * 1000;
+}
+function localToUtc(wallMs, zone) {
+  if (!zone) {
+    var d = new Date(0);
+    var w = new Date(wallMs);
+    d.setFullYear(w.getUTCFullYear(), w.getUTCMonth(), w.getUTCDate());
+    d.setHours(w.getUTCHours(), w.getUTCMinutes(), w.getUTCSeconds(), w.getUTCMilliseconds());
+    return d.getTime();
+  }
+  /* ECMA-262 UTC(t): in a repeated hour take the earlier instant; in a skipped hour use the offset from before the transition */
+  var oA = offsetAt(zone, wallMs - 864e5), oB = offsetAt(zone, wallMs + 864e5);
+  var tA = wallMs - oA, tB = wallMs - oB;
+  var okA = offsetAt(zone, tA) === oA, okB = offsetAt(zone, tB) === oB;
+  if (okA && okB) { return Math.min(tA, tB); }
+  if (okB) { return tB; }
+  return tA;
+}
+function fieldsText(f) { return f ? Object.keys(f).map(function (k) { return k + ": " + (f[k] === null || f[k] === "" ? "(none)" : f[k]); }).join("\n") : ""; }
+function visible(s) {
+  var out = "";
+  for (var ch of s) {
+    var c = ch.codePointAt(0);
+    if (c === 32) { out += "·"; }
+    else if (c < 32 || c === 127 || c > 126) { out += "⟨U+" + c.toString(16).toUpperCase().padStart(4, "0") + "⟩"; }
+    else { out += ch; }
+  }
+  return out;
+}
+
+/* rendering */
+function cell(kids) { return h("td", null, kids); }
+function rfcCell(r, show) {
+  var k = [];
+  if (r.verdict === "valid") { k.push(badge("b-ok", "VALID date-time")); }
+  else if (r.verdict === "note") { k.push(badge("b-warn", "OUTSIDE ABNF, NOTE")); }
+  else if (r.verdict === "full-date") { k.push(badge("b-info", "FULL-DATE ONLY")); }
+  else { k.push(badge("b-err", "INVALID")); }
+  if (r.inst) { k.push(h("span", { class: "val", text: TS.fmtInstant(r.inst) })); }
+  if (r.reason) { k.push(h("span", { class: "why", text: r.reason })); }
+  r.notes.forEach(function (n) { k.push(h("span", { class: "why", text: n })); });
+  if (show && r.fields) { k.push(h("pre", { class: "fields", text: fieldsText(r.fields) })); }
+  return cell(k);
+}
+function ecmaExpected(r, zone) {
+  if (!r.conforms || r.odd24) { return null; }
+  if (r.outOfRange) { return { nan: true }; }
+  if (r.utc !== null) { return { ms: r.utc }; }
+  if (r.local) {
+    var y = r.fields.year;
+    if (y < 1 || y > 9999) { return { unknown: true }; }
+    try { return { ms: localToUtc(r.local.wall, zone) }; } catch (e) { return { unknown: true }; }
+  }
+  return null;
+}
+function ecmaCell(r, zone, show) {
+  var k = [];
+  if (!r.conforms) {
+    k.push(badge("b-warn", "OUTSIDE THE FORMAT"));
+    k.push(h("span", { class: "why", text: r.reason }));
+    k.push(h("span", { class: "why", text: "Date.parse may use implementation-specific heuristics here (21.4.3.2)." }));
+  } else {
+    k.push(badge("b-ok", "CONFORMS, " + r.form));
+    var ex = ecmaExpected(r, zone);
+    if (ex && ex.ms !== undefined) {
+      k.push(h("span", { class: "val", text: TS.fmtInstant(TS.msToInstant(ex.ms)) }));
+      if (r.local) { k.push(h("span", { class: "why", text: "Local wall time read in " + (zone || hostZone || "the browser zone") + "." })); }
+    } else if (ex && ex.nan) {
+      k.push(h("span", { class: "val", text: "NaN" }));
+    } else if (ex && ex.unknown) {
+      k.push(h("span", { class: "why", text: "Local reading not computed outside years 0001 to 9999 on this page." }));
+    }
+    r.notes.forEach(function (n) { k.push(h("span", { class: "why", text: n })); });
+  }
+  if (show && r.fields) { k.push(h("pre", { class: "fields", text: fieldsText(r.fields) })); }
+  return cell(k);
+}
+function liveCell(s, r) {
+  var k = [], v = Date.parse(s);
+  if (isNaN(v)) { k.push(badge("b-err", "NaN")); }
+  else { k.push(badge("b-ok", "PARSED")); k.push(h("span", { class: "val", text: new Date(v).toISOString() })); }
+  if (r.conforms) {
+    var ex = ecmaExpected(r, "");
+    if (ex && !ex.unknown) {
+      var match = ex.nan ? isNaN(v) : v === ex.ms;
+      if (!match) { k.push(badge("b-warn", "DIFFERS FROM THE FORMAT RULE")); k.push(h("span", { class: "why", text: "The string conforms, so the spec fixes the result: " + (ex.nan ? "NaN" : TS.fmtInstant(TS.msToInstant(ex.ms))) + " in your host zone." })); }
+    }
+  } else {
+    k.push(h("span", { class: "why", text: "Outside the format: implementation-defined, this engine only." }));
+  }
+  return cell(k);
+}
+function pyCell(r, show) {
+  var k = [];
+  if (r.ok) {
+    k.push(badge("b-ok", "ACCEPTS"));
+    k.push(h("span", { class: "val", text: r.iso }));
+    if (r.aware) { k.push(h("span", { class: "why", text: "Instant: " + TS.fmtInstant(r.inst) })); }
+    else { k.push(h("span", { class: "why", text: "Naive (no offset): the instant depends on the reader's assumed zone." })); }
+    if (r.nextDay) { k.push(h("span", { class: "why", text: "Hour 24 became midnight of the next day." })); }
+    if (show) { k.push(h("pre", { class: "fields", text: fieldsText(r.fields) })); }
+  } else {
+    k.push(badge("b-err", "ValueError"));
+    k.push(h("span", { class: "val", text: r.err }));
+  }
+  return cell(k);
+}
+function goCell(r, show) {
+  var k = [];
+  if (r.ok) {
+    k.push(badge("b-ok", "ACCEPTS"));
+    k.push(h("span", { class: "val", text: TS.fmtInstant(r.inst) }));
+    k.push(h("span", { class: "why", text: "Offset " + r.offset + ", via the " + r.path + "." }));
+    if (show) { k.push(h("pre", { class: "fields", text: fieldsText(r.fields) })); }
+  } else {
+    k.push(badge("b-err", "ERROR"));
+    k.push(h("span", { class: "val", text: r.err }));
+  }
+  return cell(k);
+}
+
+var EXAMPLES = TS.CASES.map(function (c) { return c[0]; }).concat(["2024-01-15T10:00:00Z[Europe/Paris]", "2024-01-15T10:00:00−05:00"]);
+var MAXL = 500;
+function run() {
+  var raw = $("in").value, body = document.querySelector("#out tbody"), show = $("showfields").checked, zone = zsel.value;
+  body.textContent = "";
+  var lines = raw.split(/\r?\n/).filter(function (l) { return l.length > 0; });
+  if (!lines.length) { $("status").textContent = "Paste timestamps above, or load the examples."; return; }
+  var cut = lines.length > MAXL;
+  if (cut) { lines = lines.slice(0, MAXL); }
+  var n = { rfc: 0, ecma: 0, py: 0, go: 0, split: 0 };
+  lines.forEach(function (s) {
+    var R = TS.rfc3339(s), E = TS.ecma(s), P = TS.python(s), G = TS.goParse(s);
+    if (R.verdict === "valid") { n.rfc++; }
+    if (E.conforms) { n.ecma++; }
+    if (P.ok) { n.py++; }
+    if (G.ok) { n.go++; }
+    var insts = [];
+    if (R.inst) { insts.push(["RFC 3339", R.inst]); }
+    if (E.conforms && E.utc !== null) { insts.push(["ECMA-262", TS.msToInstant(E.utc)]); }
+    if (P.ok && P.aware) { insts.push(["Python", P.inst]); }
+    if (G.ok) { insts.push(["Go", G.inst]); }
+    var distinct = [];
+    insts.forEach(function (x) { if (!distinct.some(function (d) { return TS.sameInstant(d[1], x[1]); })) { distinct.push(x); } });
+    var notes = TS.rowNotes(s);
+    if (distinct.length > 1) {
+      n.split++;
+      notes.unshift("The accepting columns disagree on the instant: " + insts.map(function (x) { return x[0] + " " + TS.fmtInstant(x[1]); }).join("; ") + ".");
+    }
+    var inpKids = [h("code", { text: visible(s) })];
+    if (notes.length) { inpKids.push(h("ul", { class: "rownotes" }, notes.map(function (t) { return h("li", { text: t }); }))); }
+    body.appendChild(h("tr", null, [h("td", { class: "inp" }, inpKids), rfcCell(R, show), ecmaCell(E, zone, show), liveCell(s, E), pyCell(P, show), goCell(G, show)]));
+  });
+  $("status").textContent = lines.length + " string" + (lines.length === 1 ? "" : "s") + (cut ? " (only the first " + MAXL + " lines)" : "") + ". RFC 3339 valid date-time: " + n.rfc + ". ECMA-262 conforms: " + n.ecma + ". Python 3.14 rules accept: " + n.py + ". Go rules accept: " + n.go + ". Rows where accepting columns disagree on the instant: " + n.split + ".";
+}
+var timer = null;
+$("in").addEventListener("input", function () { clearTimeout(timer); timer = setTimeout(run, 250); });
+$("run").addEventListener("click", run);
+$("showfields").addEventListener("change", run);
+zsel.addEventListener("change", run);
+$("example").addEventListener("click", function () { $("in").value = EXAMPLES.join("\n"); run(); });
+$("clear").addEventListener("click", function () { $("in").value = ""; run(); $("in").focus(); });
+
+/* self test */
+function runSelfTest() {
+  var res, body = document.querySelector("#st-table tbody");
+  body.textContent = "";
+  try { res = TS.selfTest(); }
+  catch (e) { $("st-summary").textContent = "The self test crashed: " + String(e && e.message); return; }
+  var checks = res.filter(function (x) { return !x.control; }), passed = checks.filter(function (x) { return x.pass; }).length;
+  var ctrl = res.filter(function (x) { return x.control; })[0];
+  res.forEach(function (x) {
+    body.appendChild(h("tr", null, [h("td", { text: x.name }), h("td", null, [h("code", { text: x.want })]), h("td", null, [h("code", { text: x.got })]), h("td", { class: "res " + (x.control ? (x.pass ? "fail" : "pass") : (x.pass ? "pass" : "fail")), text: x.control ? (x.pass ? "NOT CAUGHT" : "CAUGHT") : (x.pass ? "PASS" : "FAIL") })]));
+  });
+  $("st-summary").textContent = passed + " of " + checks.length + " checks passed. Positive control: " + (ctrl && !ctrl.pass ? "caught, so the suite is live." : "NOT caught, so these results cannot be trusted.");
+}
+$("selftest").addEventListener("click", runSelfTest);
+
+$("in").value = EXAMPLES.join("\n");
+run();
+runSelfTest();
+})();
+</script>
+</body>
+</html>
