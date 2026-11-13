@@ -158,4 +158,4 @@ Python and Go columns are emulations of documented and source-read behaviour, ch
 
 ## License
 
-MIT. Copyright (c) 2026 0xelitesystem.
+MIT. Copyright (c) 2026 RBL Industries LLC.
