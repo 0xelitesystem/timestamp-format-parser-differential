@@ -154,7 +154,7 @@ Python and Go columns are emulations of documented and source-read behaviour, ch
 
 - https://github.com/0xelitesystem/date-format-pattern-translator
 - https://github.com/0xelitesystem/dst-ambiguous-time-converter
-- https://github.com/0xelitesystem/unix-timestamp-converter
+- https://github.com/0xelitesystem/epoch-seconds-ms-converter
 
 ## License
 
